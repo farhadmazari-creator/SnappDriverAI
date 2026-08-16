@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: نصب Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -36,8 +36,45 @@ jobs:
       - name: پیدا کردن پوشه پروژه
         run: |
           PROJECT_DIR=$(find project -name settings.gradle.kts -print -quit | xargs dirname)
+
+          if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "Android project was not found"
+            exit 1
+          fi
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Project found at: $PROJECT_DIR"
+
+      - name: اصلاح سازگاری JVM
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("${{ env.PROJECT_DIR }}/app/build.gradle.kts")
+          text = p.read_text(encoding="utf-8")
+
+          if "compileOptions {" not in text:
+              marker = "android {"
+
+              addition = """android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          """
+
+              text = text.replace(marker, addition, 1)
+
+          if "jvmToolchain(17)" not in text:
+              text += """
+
+          kotlin {
+              jvmToolchain(17)
+          }
+          """
+
+          p.write_text(text, encoding="utf-8")
+          PY
 
       - name: ساخت Gradle Wrapper
         working-directory: ${{ env.PROJECT_DIR }}
